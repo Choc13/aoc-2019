@@ -1,55 +1,38 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module Lib
 ( module Lib
 ) where
     
 import Data.Array
-    
-type Mode = Int
+import Data.List
+import qualified Data.Map as Map
 
-data Instruction = Instruction { opCode :: Int, paramModes :: [Mode] }
-        deriving (Show, Eq)
+answer :: [String] -> Int
+answer input = totalOrbits 0 "COM" $ buildMap input
 
-run :: Array Int Int -> Int -> IO ()
-run program ip
-    | opCode == 1 = run (binaryOp (+)) (ip + 4)
-    | opCode == 2 = run (binaryOp (*)) (ip + 4)
-    | opCode == 3 = do
-        print "Input a value:"
-        input <- getLine
-        run (updateProgram (ip + 1) $ read input) (ip + 2)
-    | opCode == 4 = do 
-        print $ param 1
-        run program (ip + 2)
-    | opCode == 5 = run program $ jumpIf (/= 0)
-    | opCode == 6 = run program $ jumpIf (== 0)
-    | opCode == 7 = run (binaryOp (\p1 p2 -> if p1 < p2 then 1 else 0)) (ip + 4)
-    | opCode == 8 = run (binaryOp (\p1 p2 -> if p1 == p2 then 1 else 0)) (ip + 4)
-    | opCode == 99 = return ()
-    where
-        Instruction {..} = parseInstruction $ program ! ip
-        param ix
-            | paramModes !! (ix - 1) == 0 = program ! (program ! (ip + ix))
-            | paramModes !! (ix - 1) == 1 = program ! (ip + ix)
-        updateProgram ip val = program // [(program ! ip, val)]
-        binaryOp op = updateProgram (ip + 3) $ op (param 1) (param 2)
-        jumpIf pred = if pred (param 1) then param 2 else ip + 3
+answer2:: [String] -> (String, Int)
+answer2 input = closestAncestor (buildMap input) "YOU" "SAN"
 
-param :: Int -> Mode -> Array Int Int -> Int
-param ip mode program
-    | mode == 0 = program ! (program ! ip)
-    | mode == 1 = program ! ip
+totalOrbits :: Int -> String -> Map.Map String [String] -> Int
+totalOrbits count com orbits = count + case Map.lookup com orbits of
+    Nothing -> 0
+    Just orbitees -> foldl (\acc x -> acc + totalOrbits (count + 1) x orbits) 0 orbitees
 
-parseInstruction :: Int -> Instruction
-parseInstruction i =
-    Instruction {
-        opCode = parseOpCode i,
-        paramModes = map (parseParamMode i) [1, 2, 3]
-    }
+closestAncestor :: Map.Map String [String] -> String -> String -> (String, Int)
+closestAncestor orbits a b = head $ sortOn snd $ Map.toList $ Map.intersectionWith (+) (Map.fromList $ pathTo orbits a "COM") (Map.fromList $ pathTo orbits b "COM")
 
-parseOpCode :: Int -> Int
-parseOpCode i = i `mod` 100
+pathTo :: Map.Map String [String] -> String -> String -> [(String, Int)]
+pathTo orbits to from
+    | from == to = [(from, 0)]
+    | otherwise = case Map.lookup from orbits of
+        Nothing -> []
+        Just orbitees ->
+            let childPath = concatMap (pathTo orbits to) orbitees
+            in if null childPath then [] else (from, 1 + snd (head childPath)) : childPath
 
-parseParamMode :: Int -> Int -> Int
-parseParamMode i ix = (i `div` (10 ^ (ix + 1))) `mod` 10
+buildMap :: [String] -> Map.Map String [String]
+buildMap input = Map.fromListWith (++) $ map createOrbitalPair input
+
+createOrbitalPair :: String -> (String, [String])
+createOrbitalPair (c:o:m:')':orbiter) = ([c,o,m], [orbiter])
+createOrbitalPair (c:o:')':orbiter) = ([c,o], [orbiter])
+createOrbitalPair (c:')':orbiter) = ([c], [orbiter])

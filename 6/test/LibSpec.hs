@@ -3,23 +3,20 @@ module LibSpec where
 import SpecHelper
 
 spec :: Spec
-spec =
-    describe "parseInstruction" $ do
-        context "with 99" $
-            it "should be 99, 0, 0, 0" $
-                parseInstruction 99 `shouldBe` Instruction { opCode = 99, paramMode1 = 0, paramMode2 = 0, paramMode3 = 0 }
+spec = do
+    describe "answer" $
+        context "with testcase" $
+            it "should be answer" $
+                answer ["COM)B", "B)C", "C)D", "D)E", "E)F", "B)G", "G)H", "D)I", "E)J", "J)K", "K)L"] `shouldBe` 42
 
-        context "with 2" $
-            it "should be 2, 0, 0, 0" $
-                parseInstruction 2 `shouldBe` Instruction { opCode = 2, paramMode1 = 0, paramMode2 = 0, paramMode3 = 0 }
+    describe "answer2" $ do
+        context "with test case" $
+            it "should be answer" $
+                answer2 ["COM)B", "B)C", "C)D", "D)E", "E)F", "B)G", "G)H", "D)I", "E)J", "J)K", "K)L", "K)YOU", "I)SAN"] `shouldBe` ("D", 6)
 
-        context "with 1002" $
-            it "should be 2, 0, 1, 0" $
-                parseInstruction 1002 `shouldBe` Instruction { opCode = 2, paramMode1 = 0, paramMode2 = 1, paramMode3 = 0 }
-            
-        context "with 11101" $
-            it "should be 1, 1, 1, 1" $
-                parseInstruction 11101 `shouldBe` Instruction { opCode = 1, paramMode1 = 1, paramMode2 = 1, paramMode3 = 1 }
+        context "pathTo" $
+            it "should be answer" $
+                pathTo (buildMap ["COM)B", "B)C", "C)D", "D)E", "E)F", "B)G", "G)H", "D)I", "E)J", "J)K", "K)L", "K)YOU", "I)SAN"]) "YOU" "COM" `shouldBe` [("COM",7),("B",6),("C",5),("D",4),("E",3),("J",2),("K",1),("YOU",0)]
 
 main :: IO ()
 main = hspec spec
