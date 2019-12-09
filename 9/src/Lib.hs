@@ -5,83 +5,78 @@ module Lib
     )
 where
 
-import Data.Maybe
-import qualified Data.Map as Map
+import           Data.Maybe
+import qualified Data.Map                      as Map
 
 type Program = Map.Map Int Int
 type InstructionPointer = Int
-type RelativePointer = Int
+type RelativeBase = Int
 type Param = Int
 type Mode = Int
-data OpCode = Add | Multiply | Input | Output | JumpIfTrue | JumpIfFalse | LessThan | Equal | JumpRelative | Halt
+data OpCode = Add | Multiply | Input | Output | JumpIfTrue | JumpIfFalse | LessThan | Equal | RelativeBaseOffset | Halt
     deriving (Show, Eq)
 data Instruction = Instruction { opCode :: OpCode, paramModes :: [Mode] }
     deriving (Show, Eq)
+data ProgramState = ProgramState { program :: Program, ip :: InstructionPointer, rb :: RelativeBase }
+    deriving (Show, Eq)
 
-answer :: Program -> Int
-answer program = maximum $ map (runAmps program) (generatePhases 5 9)
+boost :: ProgramState -> Int -> IO ()
+boost state input = case run state (Just input) of
+    Left  _                  -> print "Program halted"
+    Right (newState, output) -> case output of
+        Nothing -> print "More input required"
+        Just o  -> do
+            print o
+            boost newState input
 
-runAmps :: Program -> [Int] -> Int 
-runAmps program phases = runInitialisedAmps (initAmps program phases) 0 0
-
-initAmps :: Program -> [Int] -> Map.Map Int (Program, InstructionPointer)
-initAmps program phases = Map.fromList $ zip [0..4] $ map (initAmp program) phases
-
-initAmp :: Program -> Int -> (Program, InstructionPointer)
-initAmp program phase = case run program 0 (Just phase) of
-    Left _ -> error "Initialisation failed, program halted"
-    Right ((newProg, newIp), output) -> case output of
-        Nothing -> (newProg, newIp)
-        Just _ -> error "Initialisation failed, program produced output"
-
-runInitialisedAmps :: Map.Map Int (Program, InstructionPointer) -> Int -> Int -> Int
-runInitialisedAmps ampMap ampIndex input =
-    let
-        state = ampMap Map.! ampIndex
-        program = fst state
-        ip = snd state 
-    in case run program ip (Just input) of
-        Left _ -> input
-        Right ((newProg, newIp), output) -> case output of 
-            Nothing -> error "Program should already be initialised"
-            Just o -> runInitialisedAmps (Map.insert ampIndex (newProg, newIp) ampMap) ((ampIndex + 1) `mod` 5) o
-
-run :: Program -> InstructionPointer -> Maybe Int -> Either () ((Program, InstructionPointer), Maybe Int)
-run program ip input
-    | opCode == Add = run (binaryOp (+)) (ip + 4) input
-    | opCode == Multiply = run (binaryOp (*)) (ip + 4) input
-    | opCode == Input = case input of
-        Just i -> run (updateProgram (ip + 1) i) (ip + 2) Nothing
-        Nothing -> Right ((program, ip), Nothing)
-    | opCode == Output = Right ((program, ip + 2), Just $ param 1)
-    | opCode == JumpIfTrue = run program (jumpIf (/= 0)) input
-    | opCode == JumpIfFalse = run program (jumpIf (== 0)) input
-    | opCode == LessThan = run
-        (binaryOp (\p1 p2 -> if p1 < p2 then 1 else 0))
-        (ip + 4)
+run :: ProgramState -> Maybe Int -> Either () (ProgramState, Maybe Int)
+run ProgramState {..} input = case opCode of
+    Add ->
+        run ProgramState { program = binaryOp (+), ip = ip + 4, rb = rb } input
+    Multiply ->
+        run ProgramState { program = binaryOp (*), ip = ip + 4, rb = rb } input
+    Input -> case input of
+        Just i -> run
+            ProgramState { program = updateProgram 1 i, ip = ip + 2, rb = rb }
+            Nothing
+        Nothing -> Right
+            (ProgramState { program = program, ip = ip, rb = rb }, Nothing)
+    Output -> Right
+        ( ProgramState { program = program, ip = ip + 2, rb = rb }
+        , Just $ param 1
+        )
+    JumpIfTrue -> run
+        ProgramState { program = program, ip = jumpIf (/= 0), rb = rb }
         input
-    | opCode == Equal = run 
-        (binaryOp (\p1 p2 -> if p1 == p2 then 1 else 0))
-        (ip + 4)
+    JumpIfFalse -> run
+        ProgramState { program = program, ip = jumpIf (== 0), rb = rb }
         input
-    | opCode == Halt = Left ()
+    LessThan -> run
+        ProgramState { program = binaryOp (\p1 p2 -> if p1 < p2 then 1 else 0)
+                     , ip      = ip + 4
+                     , rb      = rb
+                     }
+        input
+    Equal -> run
+        ProgramState { program = binaryOp (\p1 p2 -> if p1 == p2 then 1 else 0)
+                     , ip      = ip + 4
+                     , rb      = rb
+                     }
+        input
+    RelativeBaseOffset -> run
+        ProgramState { program = program, ip = ip + 2, rb = rb + param 1 }
+        input
+    Halt -> Left ()
   where
     Instruction {..} = parseInstruction $ program Map.! ip
-    param ix | paramModes !! (ix - 1) == 0 = program Map.! (program Map.! (ip + ix))
-             | paramModes !! (ix - 1) == 1 = program Map.! (ip + ix)
-    updateProgram ip val = Map.insert (program Map.! ip) val program
-    binaryOp op = updateProgram (ip + 3) $ op (param 1) (param 2)
+    paramAddr ix = case paramModes !! (ix - 1) of
+        0 -> program Map.! (ip + ix)
+        1 -> ip + ix
+        2 -> rb + (program Map.! (ip + ix))
+    param ix = program Map.! paramAddr ix
+    updateProgram ix val = Map.insert (paramAddr ix) val program
+    binaryOp op = updateProgram 3 $ op (param 1) (param 2)
     jumpIf pred = if pred (param 1) then param 2 else ip + 3
-
-generatePhases :: Int -> Int -> [[Int]]
-generatePhases start end =
-    [ [a, b, c, d, e]
-    | a <- [start .. end]
-    , b <- filter (/= a) [start .. end]
-    , c <- filter (\x -> x /= a && x /= b) [start .. end]
-    , d <- filter (\x -> x /= a && x /= b && x /= c) [start .. end]
-    , e <- filter (\x -> x /= a && x /= b && x /= c && x /= d) [start .. end]
-    ]
 
 parseInstruction :: Int -> Instruction
 parseInstruction i = Instruction
@@ -99,7 +94,7 @@ parseOpCode i = case i `mod` 100 of
     6  -> JumpIfFalse
     7  -> LessThan
     8  -> Equal
-    9  -> JumpRelative
+    9  -> RelativeBaseOffset
     99 -> Halt
 
 parseParamMode :: Int -> Int -> Mode
