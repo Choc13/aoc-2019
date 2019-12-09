@@ -68,12 +68,13 @@ run ProgramState {..} input = case opCode of
         input
     Halt -> Left ()
   where
-    Instruction {..} = parseInstruction $ program Map.! ip
+    Instruction {..} = (parseInstruction . read) ip
+    read ip = fromMaybe 0 $ Map.lookup ip program
     paramAddr ix = case paramModes !! (ix - 1) of
-        0 -> program Map.! (ip + ix)
+        0 -> read (ip + ix)
         1 -> ip + ix
-        2 -> rb + (program Map.! (ip + ix))
-    param ix = program Map.! paramAddr ix
+        2 -> rb + read (ip + ix)
+    param = read . paramAddr
     updateProgram ix val = Map.insert (paramAddr ix) val program
     binaryOp op = updateProgram 3 $ op (param 1) (param 2)
     jumpIf pred = if pred (param 1) then param 2 else ip + 3
