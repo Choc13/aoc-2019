@@ -24,7 +24,6 @@ dependencies:
   - array
   - containers
   - split
-  - math-functions
 
 library:
   source-dirs: src
