@@ -1,128 +1,125 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module Lib
     ( module Lib
     )
 where
 
 import           Data.Maybe
-import qualified Data.Map                      as Map
+import qualified Data.Map as Map
 
 type Program = Map.Map Int Int
+type Address = Int
 type InstructionPointer = Int
 type RelativeBase = Int
-type Param = Int
-type Mode = Int
+type ParamIx = Int
+data Mode = Positional | Immediate | Relative
 data OpCode = Add | Multiply | Input | Output | JumpIfTrue | JumpIfFalse | LessThan | Equal | RelativeBaseOffset | Halt
     deriving (Show, Eq)
-data Instruction = Instruction { opCode :: OpCode, paramModes :: [Mode] }
-    deriving (Show, Eq)
-data ProgramState = ProgramState { program :: Program, ip :: InstructionPointer, rb :: RelativeBase }
-    deriving (Show, Eq)
+data ProgramState = ProgramState {
+    program :: Program,
+    ip :: InstructionPointer,
+    inputs :: [Int],
+    outputs :: [Int],
+    rb :: RelativeBase
+} deriving (Show, Eq)
 data Point = Point { x :: Int, y :: Int }
     deriving (Show, Eq, Ord)
 data Heading = Up | Down | Left | Right
 type Drawing = Map.Map Point Int
 
 answer1 :: Program -> Int
-answer1 program = Map.size $ 
-    runRobot ProgramState { program = program, ip = 0, rb = 0 } Point { x = 0, y = 0 } Up $ 
-    Map.fromList []
+answer1 program =
+    Map.size
+        $ runRobot (initialState program) Point { x = 0, y = 0 } Up
+        $ Map.fromList []
 
 answer2 :: Program -> Drawing
 answer2 program =
-    runRobot ProgramState { program = program, ip = 0, rb = 0 } Point { x = 0, y = 0 } Up $ 
-    Map.fromList [(Point { x = 0, y = 0 }, 1)]
+    runRobot (initialState program) Point { x = 0, y = 0 } Up
+        $ Map.fromList [(Point { x = 0, y = 0 }, 1)]
 
 runRobot :: ProgramState -> Point -> Heading -> Drawing -> Drawing
 runRobot state pos heading drawing =
-    let
-        input = fromMaybe 0 $ Map.lookup pos drawing
-    in case run state (Just input) of
-        Prelude.Left _ -> drawing
-        Prelude.Right (newState1, output1) -> case output1 of
-            Nothing -> error "More input required"
-            Just color -> case run newState1 (Just input) of
-                Prelude.Left _ -> error "Program halted before outputting direction"
-                Prelude.Right (newState2, output2) -> case output2 of 
-                    Nothing -> error "More input required"
-                    Just direction -> 
-                        let 
-                            newHeading = turn heading direction
-                            newPos = moveForward newHeading pos
-                        in runRobot newState2 newPos newHeading $ Map.insert pos color drawing
+    case run state { inputs = [fromMaybe 0 $ Map.lookup pos drawing] } of
+        (Halt,  _) -> drawing
+        (_, newState1) -> case run newState1 of
+            (Halt,  _) -> error "Halted between outputs"
+            (Input, _) -> error "More input required"
+            (Output, outputState) -> 
+                let (direction:color:_) = outputs outputState
+                    newHeading = turn heading direction
+                    newPos = moveForward newHeading pos
+                in  runRobot outputState newPos newHeading
+                        $ Map.insert pos color drawing
 
 turn :: Heading -> Int -> Heading
-turn Up 0 = Lib.Left
-turn Lib.Left 0 = Down
-turn Down 0 = Lib.Right
+turn Up        0 = Lib.Left
+turn Lib.Left  0 = Down
+turn Down      0 = Lib.Right
 turn Lib.Right 0 = Up
-turn Up 1 = Lib.Right
+turn Up        1 = Lib.Right
 turn Lib.Right 1 = Down
-turn Down 1 = Lib.Left
-turn Lib.Left 1 = Up
+turn Down      1 = Lib.Left
+turn Lib.Left  1 = Up
 
 moveForward :: Heading -> Point -> Point
-moveForward Up pos = pos { y = y pos - 1 }
-moveForward Down pos = pos { y = y pos + 1 }
-moveForward Lib.Left pos = pos { x = x pos - 1 }
+moveForward Up        pos = pos { y = y pos - 1 }
+moveForward Down      pos = pos { y = y pos + 1 }
+moveForward Lib.Left  pos = pos { x = x pos - 1 }
 moveForward Lib.Right pos = pos { x = x pos + 1 }
 
-run :: ProgramState -> Maybe Int -> Either () (ProgramState, Maybe Int)
-run ProgramState {..} input = case opCode of
-    Add ->
-        run ProgramState { program = binaryOp (+), ip = ip + 4, rb = rb } input
-    Multiply ->
-        run ProgramState { program = binaryOp (*), ip = ip + 4, rb = rb } input
-    Input -> case input of
-        Just i -> run
-            ProgramState { program = updateProgram 1 i, ip = ip + 2, rb = rb }
-            Nothing
-        Nothing -> Prelude.Right
-            (ProgramState { program = program, ip = ip, rb = rb }, Nothing)
-    Output -> Prelude.Right
-        ( ProgramState { program = program, ip = ip + 2, rb = rb }
-        , Just $ param 1
-        )
-    JumpIfTrue -> run
-        ProgramState { program = program, ip = jumpIf (/= 0), rb = rb }
-        input
-    JumpIfFalse -> run
-        ProgramState { program = program, ip = jumpIf (== 0), rb = rb }
-        input
-    LessThan -> run
-        ProgramState { program = binaryOp (\p1 p2 -> if p1 < p2 then 1 else 0)
-                     , ip      = ip + 4
-                     , rb      = rb
-                     }
-        input
-    Equal -> run
-        ProgramState { program = binaryOp (\p1 p2 -> if p1 == p2 then 1 else 0)
-                     , ip      = ip + 4
-                     , rb      = rb
-                     }
-        input
-    RelativeBaseOffset -> run
-        ProgramState { program = program, ip = ip + 2, rb = rb + param 1 }
-        input
-    Halt -> Prelude.Left ()
-  where
-    Instruction {..} = (parseInstruction . read) ip
-    read ip = fromMaybe 0 $ Map.lookup ip program
-    paramAddr ix = case paramModes !! (ix - 1) of
-        0 -> read (ip + ix)
-        1 -> ip + ix
-        2 -> rb + read (ip + ix)
-    param = read . paramAddr
-    updateProgram ix val = Map.insert (paramAddr ix) val program
-    binaryOp op = updateProgram 3 $ op (param 1) (param 2)
-    jumpIf pred = if pred (param 1) then param 2 else ip + 3
+run :: ProgramState -> (OpCode, ProgramState)
+run state = case opCode state of
+    Add -> binaryOp (+) state
+    Multiply -> binaryOp (*) state
+    LessThan -> binaryOp (\p1 p2 -> if p1 < p2 then 1 else 0) state
+    Equal -> binaryOp (\p1 p2 -> if p1 == p2 then 1 else 0) state
+    JumpIfTrue -> jumpIf (/= 0) state
+    JumpIfFalse -> jumpIf (== 0) state
+    RelativeBaseOffset -> run state { ip = ip state + 2, rb = rb state + param 1 state }
+    Input -> case inputs state of
+        (input:rest) -> run state { program = write 1 state input, ip = ip state + 2, inputs = rest }
+        [] -> (Input, state)
+    Output -> (Output, state { ip = ip state + 2, outputs = param 1 state : outputs state })
+    Halt -> (Halt, state)
 
-parseInstruction :: Int -> Instruction
-parseInstruction i = Instruction
-    { opCode     = parseOpCode i
-    , paramModes = map (parseParamMode i) [1, 2, 3]
-    }
+binaryOp :: (Int -> Int -> Int) -> ProgramState -> (OpCode, ProgramState)
+binaryOp op state = run state { program = write 3 state $ op (param 1 state) (param 2 state), ip = ip state + 4 }
+
+jumpIf :: (Int -> Bool) -> ProgramState -> (OpCode, ProgramState)
+jumpIf pred state = run state { ip = if pred (param 1 state) then param 2 state else ip state + 3 }
+                
+initialState :: Program -> ProgramState
+initialState program = ProgramState { program = program, ip = 0, rb = 0, inputs = [], outputs = [] }
+
+readRelative :: Int -> ProgramState -> Int
+readRelative offset state = Lib.read (ip state + offset) state
+
+read :: Address -> ProgramState -> Int
+read addr state = fromMaybe 0 $ Map.lookup addr (program state)
+
+write :: ParamIx -> ProgramState -> Int -> Program
+write paramIx state val = Map.insert (paramAddr paramIx state) val (program state)
+
+param :: ParamIx -> ProgramState -> Int
+param paramIx state = Lib.read (paramAddr paramIx state) state
+
+paramAddr :: ParamIx -> ProgramState -> Address 
+paramAddr paramIx state = case paramMode paramIx state of
+    Positional -> readRelative paramIx state
+    Immediate -> ip state + paramIx
+    Relative -> rb state + readRelative paramIx state
+
+paramMode :: ParamIx -> ProgramState -> Mode
+paramMode paramIx = parseParamMode paramIx . readRelative 0
+
+parseParamMode :: ParamIx -> Int -> Mode
+parseParamMode paramIx i = case (i `div` (10 ^ (paramIx + 1))) `mod` 10 of
+    0 -> Positional
+    1 -> Immediate
+    2 -> Relative
+
+opCode :: ProgramState -> OpCode
+opCode = parseOpCode . readRelative 0
 
 parseOpCode :: Int -> OpCode
 parseOpCode i = case i `mod` 100 of
@@ -136,6 +133,3 @@ parseOpCode i = case i `mod` 100 of
     8  -> Equal
     9  -> RelativeBaseOffset
     99 -> Halt
-
-parseParamMode :: Int -> Int -> Mode
-parseParamMode i ix = (i `div` (10 ^ (ix + 1))) `mod` 10

@@ -5,7 +5,7 @@ import           Data.List
 import           Data.List.Split
 import Data.Ord (comparing)
 import Data.Maybe
-import           Lib
+import           Lib hiding(read)
 
 main :: IO ()
 main = do
