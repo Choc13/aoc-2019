@@ -12,16 +12,40 @@ type Quantity = Int
 data Formula = Formula { quantity :: Quantity, inputs :: Map.Map Element Quantity }
     deriving (Show)
 
-solve :: Map.Map Element Formula -> Maybe Int
+answer1 :: Map.Map Element Formula -> Int
+answer1 formulas = fuelOre $ solve formulas
+
+binarySearch :: Int -> Int -> Int -> Map.Map Element Formula -> Int
+binarySearch maxOre start end formulas =
+    let
+        midPoint = start + ((end - start) `div` 2)
+        solution = solve $ mapFuel (* midPoint) formulas
+        ore = fuelOre solution
+    in if midPoint == start
+        then midPoint
+        else if ore > maxOre
+            then binarySearch maxOre start midPoint formulas
+            else binarySearch maxOre midPoint end formulas
+
+mapFuel ::  (Int -> Int) -> Map.Map Element Formula -> Map.Map Element Formula
+mapFuel f = Map.mapWithKey 
+    (\elem formula -> if elem == "FUEL" 
+        then formula { quantity = f (quantity formula), inputs = Map.map f (inputs formula) } 
+        else formula)
+
+fuelOre :: Map.Map Element Formula -> Int
+fuelOre formulas = fromMaybe 0 $ (Map.lookup "ORE" . inputs) =<< Map.lookup "FUEL" formulas
+
+solve :: Map.Map Element Formula -> Map.Map Element Formula
 solve formulas = case Map.lookup "FUEL" formulas of
-    Nothing -> Nothing
+    Nothing -> error "No FUEL formula"
     Just fuelFormula ->
         case
             find (\input -> fst input /= "ORE" && snd input > 0)
             $ Map.assocs
             $ inputs fuelFormula
         of
-            Nothing -> Map.lookup "ORE" $ inputs fuelFormula
+            Nothing -> formulas
             Just input ->
                 let
                     element = fst input
