@@ -7,6 +7,7 @@ import Data.List
 import Data.List.Split
 import           Data.Maybe
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Ord (comparing)
 
 type Program = Map.Map Int Int
@@ -42,6 +43,53 @@ answer1 program =
         visited = Map.fromList [(origin, (0, initialState program))], 
         frontier = [origin] }
 
+answer2 :: Program -> Point -> Int
+answer2 program oxygenPos = 
+    let 
+        origin = Point { x = 0, y = 0 }
+        completeMap = createMap SearchState { 
+            visited = Map.fromList [(origin, (0, initialState program))], 
+            frontier = [origin] }
+    in timeToFill (Map.keysSet $ Map.filter (\v -> snd v /= Wall) completeMap) (Map.singleton oxygenPos 0) [oxygenPos]
+
+timeToFill :: Set.Set Point -> Map.Map Point Int -> [Point] -> Int
+timeToFill points visited frontier = 
+    case frontier of
+        [] -> maximum $ Map.elems visited
+        (pos:nextFrontier) ->
+            let
+                nextPoints = Map.fromList 
+                    $ filter (\(p, _) -> Set.member p points && Map.notMember p visited)
+                    $ neighbours2 pos 
+                    $ visited Map.! pos
+            in timeToFill points (Map.union visited nextPoints) (nextFrontier ++ Map.keys nextPoints)
+
+neighbours2 :: Point -> Int -> [(Point, Int)]
+neighbours2 pos distance = [
+    (pos { y = y pos - 1 }, distance + 1), 
+    (pos { y = y pos + 1 }, distance + 1),
+    (pos { x = x pos - 1 }, distance + 1),
+    (pos { x = x pos + 1 }, distance + 1)]
+
+createMap :: SearchState -> Map.Map Point (Int, StatusCode)
+createMap searchState =
+    case frontier searchState of
+        [] -> Map.map (\v -> (fst v, status $ snd v)) $ visited searchState
+        (pos:nextFrontier) ->
+            let
+                posState = visited searchState Map.! pos
+            in case status $ snd posState of
+                Wall -> createMap searchState { frontier = nextFrontier }
+                _ -> 
+                    let 
+                        newPoints = Map.fromList 
+                            $ filter (\n -> Map.notMember (fst n) $ visited searchState) 
+                            $ neighbours pos
+                            $ visited searchState Map.! pos
+                    in createMap searchState {
+                        visited = Map.union (visited searchState) newPoints,
+                        frontier = nextFrontier ++ Map.keys newPoints }
+
 search :: SearchState -> Maybe (Point, Int)
 search searchState =
     case frontier searchState of
@@ -49,10 +97,7 @@ search searchState =
         (pos:nextFrontier) -> 
             let
                 posState = visited searchState Map.! pos
-                status = case outputs $ snd posState of
-                    [] -> Moved
-                    (head:tail) -> parseStatus head
-            in case status of
+            in case status $ snd posState of
                 Wall -> search searchState { frontier = nextFrontier }
                 Moved -> 
                     let 
@@ -71,6 +116,11 @@ neighbours pos (distance, state) = [
     (pos { y = y pos + 1 }, (distance + 1, move state South)),
     (pos { x = x pos - 1 }, (distance + 1, move state East)),
     (pos { x = x pos + 1 }, (distance + 1, move state West))]
+
+status :: ProgramState -> StatusCode
+status state = case outputs state of
+    [] -> Moved
+    (head:tail) -> parseStatus head
 
 parseStatus :: Int -> StatusCode
 parseStatus 0 = Wall
