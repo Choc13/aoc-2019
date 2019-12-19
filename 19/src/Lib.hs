@@ -15,16 +15,35 @@ data Point = Point { x :: Int, y :: Int }
     deriving (Show, Eq, Ord)
 
 answer1 :: Program -> Int
-answer1 program = 
-    let 
-        points = spaceToSearch 49 49
-        inputs = concatMap (\p -> [x p, y p]) points
-        outputs = findTractorBeam ((initialState program) { inputs = inputs })
-    -- in Map.size $ Map.filter (== 1) $ Map.fromList $ zip points outputs
-    in length $ filter (isTractorBeam (initialState program)) points
+answer1 program = length $ filter (isTractorBeam program) $ spaceToSearch 49 49
 
-answer2 :: Program -> Int
-answer2 program = 0
+answer2 :: Program -> (Point, Int)
+answer2 program = 
+    let 
+        topRight = head $ filter (canFitSanta program 100) $ walkRightEdge program Point { x = 2, y = 3 }
+        topLeft = topRight { x = x topRight - 99 }
+    in (topLeft, (x topLeft * 10000) + y topLeft)
+
+walkRightEdge :: Program -> Point -> [Point]
+walkRightEdge program origin = 
+    let candidates p = 
+            [
+                p { x = x p + 1 },
+                p { x = x p + 1, y = y p + 1},
+                p { y = y p + 1 }
+            ]
+        nextPoint = head . filter (isTractorBeam program) . candidates
+    in unfoldr (\p -> Just (p, nextPoint p)) origin
+
+canFitSanta :: Program -> Int -> Point -> Bool
+canFitSanta program size topRight =
+    let offset = size - 1
+        requiredPoints = [
+            topRight, 
+            topRight { x = x topRight - offset },
+            topRight { y = y topRight + offset },
+            topRight { x = x topRight - offset, y = y topRight + offset } ]
+    in all (isTractorBeam program) requiredPoints
 
 spaceToSearch :: Int -> Int -> [Point]
 spaceToSearch x y = do
@@ -32,18 +51,11 @@ spaceToSearch x y = do
     col <- [0..x]
     pure Point { x = col, y = row }
 
-isTractorBeam :: ProgramState -> Point -> Bool
-isTractorBeam state point =
-    case run (state { inputs = [x point, y point] }) of
+isTractorBeam :: Program -> Point -> Bool
+isTractorBeam program point =
+    case run ((initialState program) { inputs = [x point, y point] }) of
         (Input, _) -> error "Shouldn't need more input"
         (_, next) -> head (outputs next) == 1
-
-findTractorBeam :: ProgramState -> [Int]
-findTractorBeam state =
-    case run state of
-        (Halt, finalState) -> outputs finalState
-        (Output, next) -> findTractorBeam next
-        (_, _) -> error "Shouldn't need more input"
 
 type Program = Map.Map Int Int
 type Address = Int

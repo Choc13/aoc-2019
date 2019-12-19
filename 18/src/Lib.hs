@@ -21,18 +21,7 @@ newtype KeyChain = KeyChain String
     deriving (Eq, Ord, Show)
 type Key = Char
 
--- instance Eq KeyChain where
---     KeyChain a == KeyChain b =
---         head a == head b && sort (tail a) == sort (tail b)
-
--- instance Ord KeyChain where
---     compare (KeyChain a) (KeyChain b) =
---         case compare (head a) (head b) of
---             EQ -> compare (sort (tail a)) (sort (tail b))
---             LT -> LT
---             GT -> GT 
-
-answer1 :: String -> [(KeyChain, Int)]
+answer1 :: String -> Maybe Int
 answer1 input =
     let cave       = createCave input
         [entrance] = Map.keys $ Map.filter (== '@') cave
@@ -40,18 +29,32 @@ answer1 input =
         initiallyReachableKeys =
                 Map.fromList
                     $ map (\(k, v) -> (KeyChain [cave Map.! k], v))
-                    $ findKeys cave (Map.singleton entrance 0) [entrance]
-    in  shortestPath keyGraph
-                     initiallyReachableKeys
-                     (Map.keysSet initiallyReachableKeys)
+                    $ findKeys cave (Map.keysSet keyGraph) (Map.singleton entrance 0) [entrance]
+    in shortestPath keyGraph
+                    initiallyReachableKeys
+                    (Map.keysSet initiallyReachableKeys)
 
-answer2 :: ()
-answer2 = ()
+answer2 :: String -> Int
+answer2 input =
+    let cave       = createCave input
+        entrances = Map.keys $ Map.filter (== '@') cave
+        keyGraph = createKeyGraph cave
+        initialKeys graph entrance =
+            Map.fromList
+                $ map (\(k, v) -> (KeyChain [cave Map.! k], v))
+                $ findKeys cave (Map.keysSet graph) (Map.singleton entrance 0) [entrance]
+    in sum 
+        $ map (\e -> 
+            let 
+                graph = keyGraph e
+                initial = initialKeys graph e 
+            in fromMaybe (error "failed") $ shortestPath graph initial (Map.keysSet initial)
+        ) entrances
 
 shortestPath
-    :: KeyGraph -> Map.Map KeyChain Int -> Set.Set KeyChain -> [(KeyChain, Int)]
+    :: KeyGraph -> Map.Map KeyChain Int -> Set.Set KeyChain -> Maybe Int
 shortestPath keyGraph visited frontier = if Set.null frontier
-    then []
+    then Nothing
     else
         let
             keyChain       = Set.findMin frontier
@@ -68,7 +71,11 @@ shortestPath keyGraph visited frontier = if Set.null frontier
                     $ neighbourKeys keyGraph keyChain distance
         in
             if length chain == Map.size keyGraph
-                then (keyChain, distance) : shortestPath keyGraph visited nextFrontier
+                then 
+                    let otherDistance = shortestPath keyGraph visited nextFrontier
+                    in case otherDistance of
+                        Nothing -> Just distance
+                        Just other -> Just (min distance other)
                 else shortestPath
                     keyGraph
                     (Map.union nextKeyChains visited)
@@ -79,7 +86,8 @@ neighbourKeys keyGraph (KeyChain chain) distance =
     map (\(k, d, _) -> (KeyChain (k : sort chain), d + distance))
         $ filter
               (\(k, _, KeyChain doors) ->
-                  k `notElem` chain && sort doors `isSubsequenceOf` sort chain
+                let unlockableDoors = filter (\d -> Set.member d $ Map.keysSet keyGraph) doors
+                in k `notElem` chain && sort unlockableDoors `isSubsequenceOf` sort chain
               )
         $ Map.findWithDefault (error "Couldn't find head of chain")
                               (head chain)
@@ -87,21 +95,23 @@ neighbourKeys keyGraph (KeyChain chain) distance =
 
 createKeyGraph :: Cave -> Point -> KeyGraph
 createKeyGraph cave entrance =
-    Map.fromList
+    let keyPoints = allKeys cave (Set.singleton entrance) [entrance]
+        accessible = Set.fromList $ map (cave Map.!) keyPoints
+    in Map.fromList
         $ map
               (\k ->
                   ( Map.findWithDefault (error "Couldn't find key in cave") k cave
-                  , findOtherKeys cave (Map.singleton k 0) [(k, KeyChain "")] k
+                  , findOtherKeys cave accessible (Map.singleton k 0) [(k, KeyChain "")] k
                   )
-              )
-        $ allKeys cave (Set.singleton entrance) [entrance]
+              ) keyPoints
 
 findOtherKeys :: Cave
+    -> Set.Set Key
     -> Map.Map Point Int
     -> [(Point, KeyChain)]
     -> Point
     -> [(Key, Int, KeyChain)]
-findOtherKeys cave visited frontier self =
+findOtherKeys cave accessible visited frontier self =
     let
         canMoveTo p =
             Map.notMember p visited && Map.findWithDefault '#' p cave /= '#'
@@ -115,34 +125,35 @@ findOtherKeys cave visited frontier self =
                     Map.fromList 
                         $ filter (\(p, _) -> canMoveTo p) 
                         $ neighbours pos distance
-                newDoors  = sort ([ toLower tile | isUpper tile ] ++ doors)
+                newDoors  = sort ([ toLower tile | isUpper tile && Set.member (toLower tile) accessible ] ++ doors)
                 newKeys = [ (tile, distance, KeyChain doors) | isLower tile && pos /= self ]
-            in newKeys ++ findOtherKeys cave (Map.union visited nextPoints) (nextFrontier ++ map (, KeyChain newDoors) (Map.keys nextPoints)) self
+            in newKeys ++ findOtherKeys cave accessible (Map.union visited nextPoints) (nextFrontier ++ map (, KeyChain newDoors) (Map.keys nextPoints)) self
 
-findKeys :: Cave -> Map.Map Point Int -> [Point] -> [(Point, Int)]
-findKeys cave visited frontier =
-    let canMoveTo p =
-                Map.notMember p visited
-                    && Map.findWithDefault '#' p cave
-                    /= '#'
-                    && not (isUpper (Map.findWithDefault '#' p cave))
-    in
-        case frontier of
-            [] -> []
-            (pos : nextFrontier) ->
-                let
-                    tile     = cave Map.! pos
-                    distance = visited Map.! pos
-                    nextPoints =
-                        Map.fromList
-                            $ filter (\(p, _) -> canMoveTo p)
-                            $ neighbours pos distance
-                    newKeys = [ (pos, distance) | isLower tile ]
-                in
-                    newKeys ++ findKeys
-                        cave
-                        (Map.union visited nextPoints)
-                        (nextFrontier ++ Map.keys nextPoints)
+findKeys :: Cave -> Set.Set Key -> Map.Map Point Int -> [Point] -> [(Point, Int)]
+findKeys cave accessible visited frontier =
+    let 
+        space p = Map.findWithDefault '#' p cave
+        canMoveTo p =
+            Map.notMember p visited
+                && space p /= '#'
+                && (not (isUpper (space p)) || Set.notMember (toLower $ space p) accessible)
+    in case frontier of
+        [] -> []
+        (pos : nextFrontier) ->
+            let
+                tile     = cave Map.! pos
+                distance = visited Map.! pos
+                nextPoints =
+                    Map.fromList
+                        $ filter (\(p, _) -> canMoveTo p)
+                        $ neighbours pos distance
+                newKeys = [ (pos, distance) | isLower tile ]
+            in
+                newKeys ++ findKeys
+                    cave
+                    accessible
+                    (Map.union visited nextPoints)
+                    (nextFrontier ++ Map.keys nextPoints)
 
 allKeys :: Cave -> Set.Set Point -> [Point] -> [Point]
 allKeys cave visited frontier =

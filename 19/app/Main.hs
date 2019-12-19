@@ -1,6 +1,7 @@
 module Main where
 
 import qualified Data.Map                      as Map
+import qualified Data.Set as Set
 import           Data.List
 import           Data.List.Split
 import           Lib hiding(read)
@@ -13,15 +14,12 @@ main = do
     input <- readFile "input.txt"
     let programList = map read $ splitOn "," input
     let program     = Map.fromList $ zip [0 ..] programList
-    print $ answer1 program
-    -- print $ answer2 program
+    -- print $ answer1 program
+    print $ answer2 program
 
-printMap :: Map.Map Point Char -> IO ()
+printMap :: Set.Set Point -> IO ()
 printMap = putStrLn . unlines . draw
 
-draw :: Map.Map Point Char -> [String]
+draw :: Set.Set Point -> [String]
 draw m =
-    let points = Map.keysSet m
-        maxY = y $ maximumBy (comparing y) points
-        maxX = x $ maximumBy (comparing x) points
-    in [ [ fromMaybe '?' $ Map.lookup Point { x = col, y = row } m | col <- [0..maxX] ] | row <- [0..maxY] ]
+    [ [ if Set.member Point { x = col, y = row } m then '#' else '.' | col <- [0..49] ] | row <- [0..49] ]

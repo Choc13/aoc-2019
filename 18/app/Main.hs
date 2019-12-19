@@ -11,12 +11,7 @@ import           Data.Maybe
 main :: IO ()
 main = do
     f <- readFile "input.txt"
-    let cave                       = createCave f
-    let [entrance]                 = Map.keys $ Map.filter (== '@') cave
-    let keyGraph = createKeyGraph cave entrance
-    -- putStrLn $ unlines $ drawKeyGraph keyGraph
-    -- print $ Map.mapWithKey (\k v -> show (length v)) keyGraph
-    print $ minimumBy (comparing snd) $ map (\(KeyChain kc, d) -> (kc, d)) $ answer1 f
+    print $ answer2 f
 
 drawKeyGraph :: KeyGraph -> [String]
 drawKeyGraph graph = concat $ Map.mapWithKey drawViewFromKey graph
