@@ -15,56 +15,36 @@ data Point = Point { x :: Int, y :: Int }
     deriving (Show, Eq, Ord)
 
 answer1 :: Program -> Int
-answer1 program = sum $ map (\p -> x p * y p) $ Set.elems $ intersections $ createMap $ initialState program
+answer1 program = 
+    let 
+        points = spaceToSearch 49 49
+        inputs = concatMap (\p -> [x p, y p]) points
+        outputs = findTractorBeam ((initialState program) { inputs = inputs })
+    -- in Map.size $ Map.filter (== 1) $ Map.fromList $ zip points outputs
+    in length $ filter (isTractorBeam (initialState program)) points
 
 answer2 :: Program -> Int
-answer2 program = 
-    let a = "L,12,L,8,L,8\n"
-        b = "L,12,R,4,L,12,R,6\n"
-        c = "R,4,L,12,L,12,R,6\n"
-        routine = "A,B,A,C,B,A,C,A,C,B\n"
-        feed = "n\n"
-        inputs = map ord $ concat [routine, a, b, c, feed]
-    in findRobots $ (initialState program) { inputs = inputs }
+answer2 program = 0
 
-findRobots :: ProgramState -> Int
-findRobots state = case run state of
-    (Halt, finalState) -> head $ outputs finalState
-    (Output, next) -> findRobots next
-    (_, _) -> error "Shouldn't need more input"
+spaceToSearch :: Int -> Int -> [Point]
+spaceToSearch x y = do
+    row <- [0..y]
+    col <- [0..x]
+    pure Point { x = col, y = row }
 
-intersections :: Map.Map Point Char -> Set.Set Point
-intersections m =
-    let path = Map.keysSet $ Map.filter (== '#') m
-    in Set.filter (isIntersection path) path
-                
-isIntersection :: Set.Set Point -> Point -> Bool
-isIntersection path p = Set.fromList (neighbours p) `Set.isSubsetOf` path
+isTractorBeam :: ProgramState -> Point -> Bool
+isTractorBeam state point =
+    case run (state { inputs = [x point, y point] }) of
+        (Input, _) -> error "Shouldn't need more input"
+        (_, next) -> head (outputs next) == 1
 
-neighbours :: Point -> [Point]
-neighbours pos = [
-    pos { y = y pos - 1 },
-    pos { y = y pos + 1 },
-    pos { x = x pos - 1 },
-    pos { x = x pos + 1 }]
+findTractorBeam :: ProgramState -> [Int]
+findTractorBeam state =
+    case run state of
+        (Halt, finalState) -> outputs finalState
+        (Output, next) -> findTractorBeam next
+        (_, _) -> error "Shouldn't need more input"
 
-createMap :: ProgramState -> Map.Map Point Char
-createMap state = case run state of
-    (Halt, newState) -> Map.map chr
-        $ Map.fromList
-        $ createPoints
-        $ splitOn [10]
-        $ reverse
-        $ outputs newState
-    (Output, newState) -> createMap newState
-    (Input, _) -> error "Program should not halt or require more input"
-
-createPoints :: [[Int]] -> [(Point, Int)]
-createPoints rows = do
-    (y, row) <- zip [0..] rows
-    (x, val) <- zip [0..] row
-    pure (Point { x = x, y = y }, val)
-                
 type Program = Map.Map Int Int
 type Address = Int
 type InstructionPointer = Int

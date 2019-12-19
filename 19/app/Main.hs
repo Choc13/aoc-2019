@@ -13,8 +13,8 @@ main = do
     input <- readFile "input.txt"
     let programList = map read $ splitOn "," input
     let program     = Map.fromList $ zip [0 ..] programList
-    -- print $ answer1 program
-    print $ answer2 program
+    print $ answer1 program
+    -- print $ answer2 program
 
 printMap :: Map.Map Point Char -> IO ()
 printMap = putStrLn . unlines . draw
