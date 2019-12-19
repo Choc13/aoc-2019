@@ -13,9 +13,18 @@ main = do
     f <- readFile "input.txt"
     let cave                       = createCave f
     let [entrance]                 = Map.keys $ Map.filter (== '@') cave
-    let candidates = answer1 f
-    let maxChain = maximum $ map (\(KeyChain chain, _) -> length chain) candidates
-    print $ minimumBy (comparing snd) $ filter (\(KeyChain chain, distance) -> length chain == maxChain) candidates
+    let keyGraph = createKeyGraph cave entrance
+    -- putStrLn $ unlines $ drawKeyGraph keyGraph
+    -- print $ Map.mapWithKey (\k v -> show (length v)) keyGraph
+    print $ minimumBy (comparing snd) $ map (\(KeyChain kc, d) -> (kc, d)) $ answer1 f
+
+drawKeyGraph :: KeyGraph -> [String]
+drawKeyGraph graph = concat $ Map.mapWithKey drawViewFromKey graph
+
+drawViewFromKey :: Key -> [(Key, Int, KeyChain)] -> [String]
+drawViewFromKey key others = (key: "->") : do
+    other <- others
+    pure ('\t' : show other)
 
 draw :: Cave -> [String]
 draw m =

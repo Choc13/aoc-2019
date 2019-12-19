@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+
 module Lib
     ( module Lib
     )
@@ -54,9 +56,8 @@ shortestPath keyGraph visited frontier = if Set.null frontier
         let
             keyChain       = Set.findMin frontier
             KeyChain chain = keyChain
-            nextFrontier   = Set.deleteMin frontier
-            distance =
-                Map.findWithDefault (error ("KeyChain" ++ chain ++ "is not in the map")) keyChain visited
+            nextFrontier   = Set.delete keyChain frontier
+            distance = Map.findWithDefault (error "KeyChain is not in the map") keyChain visited
             nextKeyChains =
                 Map.fromList
                     $ filter
@@ -66,7 +67,7 @@ shortestPath keyGraph visited frontier = if Set.null frontier
                           )
                     $ neighbourKeys keyGraph keyChain distance
         in
-            if length chain == Map.size keyGraph --algo is terminating too early
+            if length chain == Map.size keyGraph
                 then (keyChain, distance) : shortestPath keyGraph visited nextFrontier
                 else shortestPath
                     keyGraph
@@ -78,7 +79,7 @@ neighbourKeys keyGraph (KeyChain chain) distance =
     map (\(k, d, _) -> (KeyChain (k : sort chain), d + distance))
         $ filter
               (\(k, _, KeyChain doors) ->
-                  k `notElem` chain && sort doors `isInfixOf` sort chain
+                  k `notElem` chain && sort doors `isSubsequenceOf` sort chain
               )
         $ Map.findWithDefault (error "Couldn't find head of chain")
                               (head chain)
@@ -89,39 +90,34 @@ createKeyGraph cave entrance =
     Map.fromList
         $ map
               (\k ->
-                  ( Map.findWithDefault (error "Could find key in cave") k cave
-                  , findOtherKeys2 cave (Map.singleton k 0) k k (KeyChain "")
+                  ( Map.findWithDefault (error "Couldn't find key in cave") k cave
+                  , findOtherKeys cave (Map.singleton k 0) [(k, KeyChain "")] k
                   )
               )
         $ allKeys cave (Set.singleton entrance) [entrance]
 
-findOtherKeys2
-    :: Cave
+findOtherKeys :: Cave
     -> Map.Map Point Int
+    -> [(Point, KeyChain)]
     -> Point
-    -> Point
-    -> KeyChain
     -> [(Key, Int, KeyChain)]
-findOtherKeys2 cave visited pos self (KeyChain chain) =
+findOtherKeys cave visited frontier self =
     let
         canMoveTo p =
             Map.notMember p visited && Map.findWithDefault '#' p cave /= '#'
-        tile       = cave Map.! pos
-        distance   = visited Map.! pos
-        nextPoints = filter (\(p, _) -> canMoveTo p) $ neighbours pos distance
-        nextChain  = [ toLower tile | isUpper tile ] ++ sort chain
-        newKeys =
-            [ (tile, distance, KeyChain chain) | isLower tile && pos /= self ]
-    in
-        newKeys
-            ++ concatMap
-                   (\(p, d) -> findOtherKeys2 cave
-                                              (Map.insert p d visited)
-                                              p
-                                              self
-                                              (KeyChain nextChain)
-                   )
-                   nextPoints
+    in case frontier of
+        [] -> []
+        ((pos, KeyChain doors):nextFrontier) ->
+            let
+                tile       = cave Map.! pos
+                distance   = visited Map.! pos
+                nextPoints = 
+                    Map.fromList 
+                        $ filter (\(p, _) -> canMoveTo p) 
+                        $ neighbours pos distance
+                newDoors  = sort ([ toLower tile | isUpper tile ] ++ doors)
+                newKeys = [ (tile, distance, KeyChain doors) | isLower tile && pos /= self ]
+            in newKeys ++ findOtherKeys cave (Map.union visited nextPoints) (nextFrontier ++ map (, KeyChain newDoors) (Map.keys nextPoints)) self
 
 findKeys :: Cave -> Map.Map Point Int -> [Point] -> [(Point, Int)]
 findKeys cave visited frontier =
@@ -169,13 +165,6 @@ allKeys cave visited frontier =
                         (Set.union visited nextPoints)
                         (nextFrontier ++ Set.elems nextPoints)
 
-unlockDoor :: Cave -> Point -> Cave
-unlockDoor cave keyPos =
-    let tile = cave Map.! keyPos
-    in  case findPos (toUpper tile) cave of
-            Nothing   -> Map.insert keyPos '.' cave
-            Just door -> Map.insert keyPos '.' $ Map.insert door '.' cave
-
 neighbours :: Point -> Int -> [(Point, Int)]
 neighbours pos distance =
     [ (pos { y = y pos - 1 }, distance + 1)
@@ -183,12 +172,6 @@ neighbours pos distance =
     , (pos { x = x pos - 1 }, distance + 1)
     , (pos { x = x pos + 1 }, distance + 1)
     ]
-
-findPos :: Char -> Cave -> Maybe Point
-findPos tile cave = case Map.keys $ Map.filter (== tile) cave of
-    [pos] -> Just pos
-    []    -> Nothing
-    _     -> error "Too many values found in map"
 
 createCave :: String -> Cave
 createCave input = Map.fromList $ do
