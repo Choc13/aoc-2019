@@ -1,10 +1,9 @@
-
 module Main where
 
 import           Data.Char
 import           Data.List
 import           Data.List.Split
-import qualified Data.Map as Map
+import qualified Data.Map                      as Map
 import           Lib
 
 main :: IO ()
