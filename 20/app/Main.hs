@@ -10,7 +10,7 @@ import           Data.Maybe
 
 main :: IO ()
 main = do
-    f <- readFile "test3.txt"
+    f <- readFile "test1a.txt"
     -- putStrLn $ unlines $ draw $ createMaze f
     print $ answer2 f
 
