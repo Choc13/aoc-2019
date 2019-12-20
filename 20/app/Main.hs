@@ -10,9 +10,9 @@ import           Data.Maybe
 
 main :: IO ()
 main = do
-    f <- readFile "input.txt"
-    putStrLn $ unlines $ draw $ createMaze f
-    print $ answer1 f
+    f <- readFile "test3.txt"
+    -- putStrLn $ unlines $ draw $ createMaze f
+    print $ answer2 f
 
 draw :: Maze -> [String]
 draw m =
@@ -27,4 +27,4 @@ draw m =
 
 drawSpace :: Space -> Char
 drawSpace Empty    = '.'
-drawSpace (Portal p) = head p
+drawSpace (Portal p _) = head p
