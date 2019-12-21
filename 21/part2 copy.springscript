@@ -1,0 +1,15 @@
+NOT T T
+AND A T
+AND B T
+AND C T
+NOT T T # T true is any holes in next 3 spaces
+AND D T # T true is hole approaching and can land
+NOT T T # T says whether not to jump
+NOT T J # negate T to jump if required
+AND J T # Ensure T is false at the end
+OR E T
+OR H T # T true if E or H is true
+AND T J # Jump if hole approaching and can land in a spot that we can move on from
+NOT T T
+AND J T
+RUN
