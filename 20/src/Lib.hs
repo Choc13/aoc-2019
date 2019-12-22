@@ -29,25 +29,27 @@ answer1 input =
         [entrance] = Map.keys $ Map.filter (== Portal "AA" Outer) maze
     in shortestPath maze (Map.singleton entrance 0) [entrance]
 
-answer2 :: String -> Maybe ((Point, [Space]), Int)
+answer2 :: String -> Maybe Int
 answer2  input = 
     let maze = createMaze input
-        [entrance] = Map.keys $ Map.filter (== Portal "AA" Outer) maze
-    in shortestPathWithLevels maze (Map.singleton (entrance, []) 0) [(entrance, [])]
+        entryPortal = Portal "AA" Outer
+        [entrance] = Map.keys $ Map.filter (== entryPortal) maze
+        initialState = (entrance, entryPortal, 0)
+    in shortestPathWithLevels maze (Map.singleton (entrance, entryPortal, 0) 0) [initialState]
 
-shortestPathWithLevels :: Maze -> Map.Map (Point, [Space]) Distance -> [(Point, [Space])] -> Maybe ((Point, [Space]), Int)
+shortestPathWithLevels :: Maze -> Map.Map (Point, Space, Level) Distance -> [(Point, Space, Level)] -> Maybe Int
 shortestPathWithLevels maze visited frontier = case frontier of
     [] -> Nothing
-    ((pos, portals) : nextFrontier) ->
+    ((pos, portal, level) : nextFrontier) ->
         let space    = maze Map.! pos
-            distance = visited Map.! (pos, portals)
+            distance = visited Map.! (pos, portal, level)
             adjacent =
                     Map.fromList
                         $ map (, distance + 1)
                         $ filter (`Map.notMember` visited)
-                        $ neighboursWithPortals maze pos portals
-        in  case (space, level portals) of
-            (Portal "ZZ" Outer, 0) -> Just ((pos, portals), distance)
+                        $ neighboursWithPortals maze pos portal level
+        in  case (space, level) of
+            (Portal "ZZ" Outer, 0) -> Just distance
             _           -> shortestPathWithLevels
                             maze
                             (Map.union visited adjacent)
@@ -56,10 +58,10 @@ shortestPathWithLevels maze visited frontier = case frontier of
 level :: [Space] -> Int
 level portals = sum $ map (\(Portal p s) -> if s == Inner then 1 else - 1) portals
 
-neighboursWithPortals :: Maze -> Point -> [Space] -> [(Point, [Space])]
-neighboursWithPortals maze pos portals = 
-    maybeToList (findPortalExit2 maze pos portals) ++
-        map (, portals)
+neighboursWithPortals :: Maze -> Point -> Space -> Level -> [(Point, Space, Level)]
+neighboursWithPortals maze pos portal level = 
+    maybeToList (findPortalExit2 maze pos level) ++
+        map (, portal, level)
             (filter (`Map.member` maze)
                 [ (pos { y = y pos - 1 })
                 , (pos { y = y pos + 1 })
@@ -68,15 +70,13 @@ neighboursWithPortals maze pos portals =
                 ])
 
 -- Making the assumption that ZZ portals not at level 0 just get filtered out here and so are effectively walls
-findPortalExit2 :: Maze -> Point -> [Space] -> Maybe (Point, [Space])
-findPortalExit2 maze entrance portals = case maze Map.! entrance of
-    Portal p s -> if Portal p s `elem` portals
-        then Nothing
-        else listToMaybe
-            $ filter (\(_, ps) -> level ps >= 0)
-            $ map (, Portal p s:portals)
-            $ Map.keys
-            $ Map.filter (isOppositePortal (Portal p s)) maze
+findPortalExit2 :: Maze -> Point -> Level -> Maybe (Point, Space, Level)
+findPortalExit2 maze entrance prevLevel = case maze Map.! entrance of
+    Portal p s -> listToMaybe
+        $ filter (\(_, _, l) -> l >= 0)
+        $ map (\(p, exit) -> (p, exit, prevLevel + if s == Inner then 1 else -1))
+        $ Map.assocs
+        $ Map.filter (isOppositePortal (Portal p s)) maze
     Empty -> Nothing
 
 shortestPath :: Maze -> Map.Map Point Int -> [Point] -> Maybe Int

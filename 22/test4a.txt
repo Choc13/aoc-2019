@@ -1,0 +1,2 @@
+deal into new stack
+cut -2
