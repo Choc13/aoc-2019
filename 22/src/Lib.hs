@@ -1,5 +1,3 @@
-{-# LANGUAGE TupleSections #-}
-
 module Lib
     ( module Lib
     )
@@ -14,12 +12,14 @@ data Shuffle = Cut Int | Reverse | DealIncrement Int
 type DeckSize = Int
 type Position = Int
 
-answer1 :: DeckSize -> Position -> [String] -> Position
-answer1 deckSize pos input =
-    foldl (doShuffle deckSize) pos $ parseInstructions input
+answer1 :: [String] -> Position
+answer1 input = shuffle 10007 2019 $ parseInstructions input
 
 answer2 :: [String] -> Int
 answer2 input = 0
+
+shuffle :: DeckSize -> Position -> [Shuffle] -> Position
+shuffle deckSize = foldl (doShuffle deckSize)
 
 doShuffle :: DeckSize -> Position -> Shuffle -> Position
 doShuffle deckSize position shuffle = case shuffle of
