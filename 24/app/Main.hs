@@ -9,11 +9,8 @@ import qualified Data.Map as Map
 main :: IO ()
 main = do
     f <- readFile "input.txt"
-    -- putStrLn $ unlines $ map draw (simulate $ createLayout f) !! 4
-    -- print $ biodiversityForTile 5 Point { x = 0, y = 3 }
-    -- print $ biodiversityForTile 5 Point { x = 1, y = 4 }
-    -- print $ biodiversity $ createLayout f
     print $ answer1 f
+    print $ answer2 200 f
 
 draw :: Layout -> [String]
 draw m =
@@ -29,3 +26,4 @@ draw m =
 drawSpace :: Tile -> Char
 drawSpace Empty    = '.'
 drawSpace Bug = '#'
+drawSpace Centre = '?'
