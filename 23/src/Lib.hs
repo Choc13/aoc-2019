@@ -20,12 +20,34 @@ answer1 program =
     let computers = createComputers program 50
     in runComputers 0 computers
 
-runComputer :: ProgramState -> IO ()
-runComputer state = case run state of
-    (Output, nextState) -> do
-        print $ "Output" ++ show (outputs nextState)
-    (Input, nextState) -> runComputer nextState
+answer2 :: Program -> Int
+answer2 program = converge (==) $ runComputersWithNat 0 0 Nothing $ createComputers program 50
 
+converge :: (a -> a -> Bool) -> [a] -> a
+converge p (x:ys@(y:_))
+    | p x y     = y
+    | otherwise = converge p ys
+
+runComputersWithNat :: Addr -> Int -> Maybe (Int, Int) -> Map.Map Addr ProgramState -> [Int]
+runComputersWithNat addr idleCount natPacket computers = 
+    let nextAddr = (addr + 1) `mod` 50
+    in if idleCount >= (Map.size computers * 2)
+        then case natPacket of
+            Nothing -> error "No NAT packet to resume from idle"
+            Just np -> snd np : 
+                runComputersWithNat 0 0 natPacket (Map.adjust (\old -> old { inputs = [ fst np, snd np ] }) 0 computers)
+        else case run $ computers Map.! addr of
+            (Output, nextState) -> case reverse $ outputs nextState of
+                [255, x, y] -> runComputersWithNat nextAddr 0 (Just (x, y))
+                        $ Map.insert addr (nextState { outputs = [] }) computers
+                [dest, x, y] -> runComputersWithNat nextAddr 0 natPacket
+                    $ Map.insert addr (nextState { outputs = [] })
+                    $ Map.adjust (\old -> old { inputs = inputs old ++ [x, y] }) dest computers
+                _ -> runComputersWithNat addr 0 natPacket 
+                    $ Map.insert addr nextState computers
+            (Input, nextState) -> runComputersWithNat nextAddr (idleCount + 1) natPacket 
+                $ Map.insert addr (nextState { inputs = [-1] }) computers
+            (Halt, _) -> error "NICs shouldn't halt"
 
 runComputers :: Addr -> Map.Map Addr ProgramState -> IO ()
 runComputers addr computers = 
